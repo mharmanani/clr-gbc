@@ -14,7 +14,6 @@ TEST_ANNOT = 'data/train_annot.csv'
 
 class HistologyDataset(Dataset):
     def __init__(self, annotations_file, img_dir, transform=None, target_transform=None):
-        assert 'test_annot.csv' in os.listdir('data')
         self.img_labels = pd.read_csv(annotations_file)
         self.img_dir = img_dir
         self.transform = transform
@@ -32,6 +31,9 @@ class HistologyDataset(Dataset):
         if self.target_transform:
             label = self.target_transform(label)
         return image, label
+
+# Create the labels file
+generate_labels(TRAIN_PATH, TEST_PATH)
 
 # Create the train data loader
 train_dataset = HistologyDataset(annotations_file=TRAIN_ANNOT, img_dir=TRAIN_PATH)
