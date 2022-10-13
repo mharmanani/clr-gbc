@@ -44,7 +44,7 @@ shuffle_dataset = True
 random_seed= 42
 
 # Creating data indices for training and validation splits:
-dataset_size = len(dataset)
+dataset_size = len(os.listdir(TRAIN_PATH))
 indices = list(range(dataset_size))
 split = int(np.floor(validation_split * dataset_size))
 if shuffle_dataset :
