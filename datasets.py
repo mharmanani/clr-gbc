@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 from PIL import Image
+from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
@@ -31,11 +32,11 @@ class HistologyDataset(Dataset):
             label = self.target_transform(label)
         return image, label
 
-if __name__ == '__main__':
+def build_datasets():
     TRAIN_PATH = 'data/train'
     TEST_PATH = 'data/test'
-    TRAIN_ANNOT = 'data/test_annot.csv'
-    TEST_ANNOT = 'data/train_annot.csv'
+    TRAIN_ANNOT = 'data/train_annot.csv'
+    TEST_ANNOT = 'data/test_annot.csv'
     
     # Create the labels file
     generate_labels(TRAIN_PATH, TEST_PATH)
@@ -60,12 +61,17 @@ if __name__ == '__main__':
     val_sampler = SubsetRandomSampler(val_indices)
 
     # Create the train data loader
-    train_dataset = HistologyDataset(annotations_file=TRAIN_ANNOT, img_dir=TRAIN_PATH)
+    train_dataset = HistologyDataset(annotations_file=TRAIN_ANNOT, img_dir=TRAIN_PATH, transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler)
 
     # Create the validation data loader
     val_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=val_sampler)
 
     # Create the test data loader
-    test_dataset = HistologyDataset(annotations_file=TEST_ANNOT, img_dir=TEST_PATH)
+    test_dataset = HistologyDataset(annotations_file=TEST_ANNOT, img_dir=TEST_PATH, transform=transforms.ToTensor())
     test_loader = DataLoader(test_dataset)
+
+    return train_loader, val_loader, test_loader
+
+if __name__ == '__main__':
+    build_datasets()

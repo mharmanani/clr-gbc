@@ -8,10 +8,10 @@ def generate_labels(train_path, test_path):
     train_annot.write('img,label\n')
     for img in os.listdir(test_path):
         label = img[0:3]
-        val_annot.write('{0}/{1},{2}\n'.format(test_path, img, label))
+        val_annot.write('{0},{1}\n'.format(img, label))
     for img in os.listdir(train_path):
         label = img[0:3]
-        train_annot.write('{0}/{1},{2}\n'.format(test_path, img, label))
+        train_annot.write('{0},{1}\n'.format(img, label))
         
 
 def generate_annotation_files():
