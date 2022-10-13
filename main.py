@@ -14,8 +14,9 @@ from torchvision import transforms, datasets
 from util import TwoCropTransform, AverageMeter
 from util import adjust_learning_rate, warmup_learning_rate
 from util import set_optimizer, save_model
-from networks.resnet_big import SupConResNet
-from losses import SupConLoss
+from resnet import SupConResNet
+from loss import SupConLoss
+from datasets import HistologyDataset
 
 try:
     import apex
@@ -56,16 +57,17 @@ def parse_option():
                         choices=['cifar10', 'cifar100', 'path'], help='dataset')
     parser.add_argument('--mean', type=str, help='mean of dataset in path in form of str tuple')
     parser.add_argument('--std', type=str, help='std of dataset in path in form of str tuple')
-    parser.add_argument('--data_folder', type=str, default=None, help='path to custom dataset')
+    parser.add_argument('--train_data_folder', type=str, default=None, help='path to custom dataset')
+    parser.add_argument('--t_annot_data_folder', type=str, default=None, help='path to custom datase
     parser.add_argument('--size', type=int, default=32, help='parameter for RandomResizedCrop')
 
     # method
     parser.add_argument('--method', type=str, default='SupCon',
                         choices=['SupCon', 'SimCLR'], help='choose method')
 
-    # temperature
-    parser.add_argument('--temp', type=float, default=0.07,
-                        help='temperature for loss function')
+    # tissue type 1 - 9
+    parser.add_argument('--tissue', type=float, default=1,
+                        help='tissue type for loss function')
 
     # other setting
     parser.add_argument('--cosine', action='store_true',
@@ -81,13 +83,15 @@ def parse_option():
 
     # check if dataset is path that passed required arguments
     if opt.dataset == 'path':
-        assert opt.data_folder is not None \
+        assert opt.train_data_folder is not None \
             and opt.mean is not None \
             and opt.std is not None
 
     # set the path according to the environment
-    if opt.data_folder is None:
-        opt.data_folder = './datasets/'
+    if opt.train_data_folder is None:
+        opt.train_data_folder = './data/NCT-CRC-HE-100K-NONORM/train'
+    if opt.t_annot_data_folder is None:
+        opt.t_annot_data_folder = './data//NCT-CRC-HE-100K-NONORM/train_annot2.csv'
     opt.model_path = './save/SupCon/{}_models'.format(opt.dataset)
     opt.tb_path = './save/SupCon/{}_tensorboard'.format(opt.dataset)
 
@@ -96,9 +100,9 @@ def parse_option():
     for it in iterations:
         opt.lr_decay_epochs.append(int(it))
 
-    opt.model_name = '{}_{}_{}_lr_{}_decay_{}_bsz_{}_temp_{}_trial_{}'.\
+    opt.model_name = '{}_{}_{}_lr_{}_decay_{}_bsz_{}_tissue_{}_trial_{}'.\
         format(opt.method, opt.dataset, opt.model, opt.learning_rate,
-               opt.weight_decay, opt.batch_size, opt.temp, opt.trial)
+               opt.weight_decay, opt.batch_size, opt.tissue, opt.trial)
 
     if opt.cosine:
         opt.model_name = '{}_cosine'.format(opt.model_name)
@@ -155,15 +159,15 @@ def set_loader(opt):
     ])
 
     if opt.dataset == 'cifar10':
-        train_dataset = datasets.CIFAR10(root=opt.data_folder,
+        train_dataset = datasets.CIFAR10(root=opt.train_data_folder,
                                          transform=TwoCropTransform(train_transform),
                                          download=True)
     elif opt.dataset == 'cifar100':
-        train_dataset = datasets.CIFAR100(root=opt.data_folder,
+        train_dataset = datasets.CIFAR100(root=opt.train_data_folder,
                                           transform=TwoCropTransform(train_transform),
                                           download=True)
     elif opt.dataset == 'path':
-        train_dataset = datasets.ImageFolder(root=opt.data_folder,
+        train_dataset = datasets.ImageFolder(root=opt.train_data_folder,
                                             transform=TwoCropTransform(train_transform))
     else:
         raise ValueError(opt.dataset)
@@ -178,7 +182,7 @@ def set_loader(opt):
 
 def set_model(opt):
     model = SupConResNet(name=opt.model)
-    criterion = SupConLoss(temperature=opt.temp)
+    criterion = SupConLoss(tissue=opt.tissue)
 
     # enable synchronized Batch Normalization
     if opt.syncBN:
