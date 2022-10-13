@@ -2,9 +2,10 @@ import torch
 import torch.nn as nn
 
  class SupConLoss(nn.Module):
-    def __init__(self, transform, ??):
+    def __init__(self, tissue, target_tissue):
         super(SubConLoss, self).__init__()
-        self.transform = transform
+        self.tissue = tissue
+        self.target_tissue = tissue
 
     def forward(self, features, labels=None, mask=None):
         device = (torch.device('cuda'))
@@ -44,7 +45,7 @@ import torch.nn as nn
         # compute logits
         anchor_dot_contrast = torch.div(
             torch.matmul(anchor_feature, contrast_feature.T),
-            self.temperature)
+            self.tissue)
         # for numerical stability
         logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
         logits = anchor_dot_contrast - logits_max.detach()
@@ -68,7 +69,7 @@ import torch.nn as nn
         mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
 
         # loss
-        loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
+        loss = - (self.tissue / self.target_tissue) * mean_log_prob_pos
         loss = loss.view(anchor_count, batch_size).mean()
 
         return loss
