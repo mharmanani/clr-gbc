@@ -42,7 +42,7 @@ def build_datasets():
     generate_labels(TRAIN_PATH, TEST_PATH)
 
     # Hyperparameters for batch GD and train/val split
-    batch_size = 64
+    batch_size = 8 # TODO: Change back to 64, 8 is used for testing only
     validation_split = .2
     shuffle_dataset = True
     random_seed= 42
