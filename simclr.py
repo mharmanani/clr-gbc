@@ -73,6 +73,9 @@ class SimCLR():
                 'loss': self.loss
             }, checkpt_name)
 
+    def test(self, test_loader):
+        pass
+
 
 
 
