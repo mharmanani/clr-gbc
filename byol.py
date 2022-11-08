@@ -87,5 +87,5 @@ def train_byol_model(model_backbone, epochs=10, batch_size=8, validation_split=0
         end = time.time()
         print(f'[*] Epoch: {epoch} - Avg Train Loss: {avg_train_loss:.3f} - Avg Val Loss: {avg_val_loss:.3f} - Elapsed: {end - start:.2f}')
 
-resnet = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
-train_byol_model(model_backbone=resnet)
+#resnet = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+#train_byol_model(model_backbone=resnet)
