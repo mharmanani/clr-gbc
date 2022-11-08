@@ -7,7 +7,7 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
-from utils import generate_labels
+from utils import generate_labels, StochasticAugmentation
 
 
 class HistologyDataset(Dataset):
@@ -32,7 +32,7 @@ class HistologyDataset(Dataset):
             label = self.target_transform(label)
         return image, label
 
-def build_datasets(batch_size=8, validation_split=0.2, shuffle_dataset=True, random_seed=42):
+def build_datasets(batch_size=8, validation_split=0.2, shuffle_dataset=True, random_seed=42, augment_views=False):
     TRAIN_PATH = 'data/train'
     TEST_PATH = 'data/test'
     TRAIN_ANNOT = 'data/train_annot.csv'
@@ -55,7 +55,11 @@ def build_datasets(batch_size=8, validation_split=0.2, shuffle_dataset=True, ran
     val_sampler = SubsetRandomSampler(val_indices)
 
     # Create the train data loader
-    train_dataset = HistologyDataset(annotations_file=TRAIN_ANNOT, img_dir=TRAIN_PATH, transform=transforms.ToTensor())
+    if augment_views:
+        train_dataset = HistologyDataset(annotations_file=TRAIN_ANNOT, img_dir=TRAIN_PATH, 
+                                         transform=StochasticAugmentation())
+    else: train_dataset = HistologyDataset(annotations_file=TRAIN_ANNOT, img_dir=TRAIN_PATH, transform=transforms.ToTensor())
+    
     train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler)
 
     # Create the validation data loader

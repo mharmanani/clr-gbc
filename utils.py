@@ -1,5 +1,20 @@
 import os
 import pandas as pd
+from torchvision import transforms
+
+class StochasticAugmentation:
+    def __init__(self, size=(224, 224)):
+        self.size = size
+        self.aug = transforms.Compose([
+            transforms.RandomResizedCrop(size=size),
+            transforms.RandomHorizontalFlip(),  # with 0.5 probability
+            transforms.RandomApply([transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.ToTensor()
+        ])
+
+    def __call__(self, X):
+        return self.aug(X), self.aug(X)
 
 def generate_labels(train_path, test_path):
     val_annot = open('data/test_annot.csv', 'w')
@@ -13,6 +28,18 @@ def generate_labels(train_path, test_path):
         label = img[0:3]
         train_annot.write('{0},{1}\n'.format(img, label))
         
+def map_labels_to_int():
+    return {
+        "ADI": 0,
+        "BACK": 1,
+        "DEB": 2,
+        "LYM": 3,
+        "MUC": 4,
+        "MUS": 5,
+        "NORM": 6, 
+        "STR": 7,
+        "TUM": 8
+    }
 
 def generate_annotation_files():
     """

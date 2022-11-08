@@ -13,9 +13,9 @@ def parse_option():
 
     parser.add_argument('--model', type=str, default='simclr',
                         help='model to train')
-    parser.add_argument('--batch_size', type=int, default=8,
+    parser.add_argument('--batch_size', type=int, default=32,
                         help='batch size to train')
-    parser.add_argument('--num_epochs', type=int, default=1,
+    parser.add_argument('--num_epochs', type=int, default=30,
                         help='epochs to train')
     parser.add_argument('--num_views', type=int, default=2,
                         help='epochs to train')
@@ -29,9 +29,10 @@ def parse_option():
 
 def main():
     opt = parse_option()
+    print(opt)
 
     if opt.model == 'simclr':
-        train_loader, val_loader, test_loader = build_datasets(batch_size=opt.batch_size)
+        train_loader, val_loader, test_loader = build_datasets(batch_size=opt.batch_size, augment_views=True)
         model = SimCLR(
                     model_backbone=resnet50(weights=ResNet50_Weights.IMAGENET1K_V1 if opt.pretrained else None), 
                     batch_size=opt.batch_size,
@@ -41,12 +42,15 @@ def main():
                 )
         model.train(train_loader=train_loader, val_loader=val_loader)
         model.test(test_loader=test_loader)
-    
-    if opt.model == 'byol':
+
+    elif opt.model == 'byol':
         train_byol_model(
             model_backbone=resnet50(weights=ResNet50_Weights.IMAGENET1K_V1 if opt.pretrained else None), 
             epochs=opt.num_epochs,
             batch_size=opt.batch_size)
+
+    else:
+        print('None selected')
             
 
 
