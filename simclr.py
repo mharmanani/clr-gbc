@@ -6,22 +6,23 @@ import pandas as pd
 import torch
 from torch import nn
 import torch.nn.functional as F
+import time
 from torch import nn
 from torchvision.io import read_image
-from torchvision.models.resnet import resnet50, resnet101
+from torchvision.models.resnet import resnet18, resnet50, resnet101
 from torchvision import transforms
 from torch.cuda.amp import GradScaler, autocast
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
 
-import time
-
-import metrics
+from utils import map_labels_to_int
 
 class SimCLR():
     def __init__(self, model_backbone, batch_size, num_epochs, num_views=2, project_dim=64,
-                 temperature=0.5, device='cuda'):
+                 num_classes=9, temperature=0.5, device='cuda'):
         self.device = device 
         self.model = model_backbone.to(self.device)
-        self.optim = torch.optim.Adam(self.model.parameters(), )
+        self.optim = torch.optim.Adam(self.model.parameters())
         self.criterion = nn.CrossEntropyLoss(reduction="sum")
         self.similarity_f = nn.CosineSimilarity(dim=2)
         self.batch_size = batch_size
@@ -33,6 +34,11 @@ class SimCLR():
             nn.ReLU(),
             nn.Linear(1000, project_dim, bias=False),
         ).to(self.device)
+
+        self.clf_head = nn.Sequential(
+            nn.Linear(1000, num_classes),
+            nn.Softmax(dim=1)
+        ).to(self.device)
     
     def forward(self, x_i, x_j):
         h_i = self.model(x_i)
@@ -41,6 +47,65 @@ class SimCLR():
         z_i = self.projection_head(h_i)
         z_j = self.projection_head(h_j)
         return h_i, h_j, z_i, z_j
+
+    def build_feature_label_arrays(self, loader):
+        feature_vector = []
+        labels_vector = []
+        for i, (X, y) in enumerate(loader):
+            X = X.to(self.device)
+            y = map_labels_to_int(y, dtype='long')
+
+            # get encoding
+            with torch.no_grad():
+                h, _, z, _ = self.forward(X, X)
+
+            h = h.detach()
+
+            feature_vector.extend(h.cpu().detach().numpy())
+            labels_vector.extend(y.detach().numpy())
+
+            if i % 20 == 0:
+                print(f"Step [{i}/{len(loader)}]\t Computing features...")
+        
+        feature_vector = np.array(feature_vector)
+        labels_vector = np.array(labels_vector)
+        return feature_vector, labels_vector
+
+    def create_data_loaders_from_arrays(self, loader, batch_size):
+        X, y = self.build_feature_label_arrays(loader)
+        dataset = torch.utils.data.TensorDataset(
+            torch.from_numpy(X), torch.from_numpy(y)
+        )
+        data_loader = torch.utils.data.DataLoader(
+            dataset, batch_size=batch_size, shuffle=False
+        )
+        return data_loader
+
+    def train_clf_head(self, train_loader, num_epochs=30):
+        ft_train_loader  = self.create_data_loaders_from_arrays(train_loader, 64)
+        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(self.clf_head.parameters())
+
+        for epoch in range(num_epochs):
+            losses = []
+            accs = []
+            for (H, t) in ft_train_loader:
+                optimizer.zero_grad()
+                H = H.to(self.device)
+                t = t.to(self.device)
+                y = self.clf_head(H)
+                loss = criterion(y, t)
+                
+                train_acc = accuracy_score(torch.argmax(y, axis=1).to('cpu').detach(), t.to('cpu').detach())
+
+                loss.backward()
+                optimizer.step()
+
+
+                losses.append(loss.cpu().detach().numpy())
+                accs.append(train_acc)
+
+            print(f"Epoch [{epoch}/{num_epochs}]\t Loss: {sum(losses) / len(losses)}\t Accuracy: {sum(accs) / len(accs)}")
 
     def mask_correlated_samples(self, batch_size):
         N = 2 * batch_size
@@ -74,33 +139,6 @@ class SimCLR():
         
         return loss
 
-    def infoNCELoss(self, X):
-        X = F.normalize(X, dim=1) # apply normalization to the extracted features
-        similarity_matrix = X@X.T
-
-        #labels = torch.eye(self.batch_size * self.views) # give a label to each view of each image
-        labels = torch.eye(X.shape[0]) # give a label to each view of each image
-
-        mask = torch.eye(labels.shape[0], dtype=torch.bool).to(self.device)
-        labels = labels[~mask].view(labels.shape[0], -1)
-        #print("X.shape", X.shape)
-        #print("SimM.shape", similarity_matrix.shape)
-        #print("labels.shape", labels.shape)
-        #print("mask.shape", mask.shape)
-        similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
-
-        # select and combine multiple positives
-        positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
-
-        # select only the negatives the negatives
-        negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
-
-        logits = torch.cat([positives, negatives], dim=1)
-        labels = torch.zeros(logits.shape[0], dtype=torch.long).to(self.device)
-
-        logits = logits / self.temperature
-        return logits, labels
-
     def train(self, train_loader, val_loader):
         for epoch in range(self.num_epochs):
             epoch_start_time = time.time()
@@ -113,18 +151,17 @@ class SimCLR():
                 loss.backward()
                 self.optim.step()
 
-            self.model.eval()
-            with torch.no_grad():
-                for (x_vi, x_vj), _ in val_loader:
-                    x_vi, x_vj = x_vi.to(self.device), x_vj.to(self.device)
-                    h_vi, h_vj, z_vi, z_vj = self.forward(x_vi, x_vj)
-                    #valid_loss = self.NT_Xent(z_vi, z_vj)
-
             epoch_end_time = time.time()
-            epoch_dur = roud(epoch_end_time - epoch_start_time, 2)
-            print('[epoch {0}] [train loss={1}] [valid loss={2}] [time elapsed={3}]'.format(epoch, loss, -42, epoch_dur))
+            epoch_dur = round(epoch_end_time - epoch_start_time, 2)
+            print('[epoch {0}] [train loss={1}] [time elapsed={2}s]'.format(epoch, loss, epoch_dur))
 
-            checkpt_name = 'simclr_checkpt_{0}.pth'.format(epoch)
+            try: os.mkdir('checkpoints')
+            except: pass
+
+            try: os.mkdir('checkpoints/simclr')
+            except: pass
+
+            checkpt_name = 'checkpoints/simclr/{0}.pth'.format(epoch)
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': self.model.state_dict(),
@@ -133,7 +170,19 @@ class SimCLR():
             }, checkpt_name)
 
     def test(self, test_loader):
-        pass
+        ft_test_loader  = self.create_data_loaders_from_arrays(test_loader, 64)
+        self.model.eval()
+        with torch.no_grad():
+            total = correct = 0
+            for X, t in ft_test_loader:
+                X = X.to(self.device)
+                y = self.clf_head(X)
+                for idx, i in enumerate(y.cpu()):
+                    if torch.argmax(i).cpu() == t.cpu()[idx]:
+                        correct +=1
+                    total +=1
+        return round(total / correct, 3)
+                
 
 
 

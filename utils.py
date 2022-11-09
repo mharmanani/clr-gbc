@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from torchvision import transforms
+import torch
 
 class StochasticAugmentation:
     def __init__(self, size=(224, 224)):
@@ -28,18 +29,25 @@ def generate_labels(train_path, test_path):
         label = img[0:3]
         train_annot.write('{0},{1}\n'.format(img, label))
         
-def map_labels_to_int():
-    return {
+def map_labels_to_int(y, dtype='long'):
+    encoding = {
         "ADI": 0,
         "BACK": 1,
+        "BAC": 1,
         "DEB": 2,
         "LYM": 3,
         "MUC": 4,
         "MUS": 5,
         "NORM": 6, 
+        "NOR": 6,
         "STR": 7,
         "TUM": 8
     }
+
+    if dtype == 'long':
+        return torch.LongTensor([encoding[yy] for yy in y])
+    else:
+        return torch.Tensor([encoding[yy] for yy in y])
 
 def generate_annotation_files():
     """
