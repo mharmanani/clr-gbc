@@ -67,7 +67,7 @@ def build_datasets(batch_size=8, validation_split=0.2, shuffle_dataset=True, ran
 
     # Create the test data loader
     test_dataset = HistologyDataset(annotations_file=TEST_ANNOT, img_dir=TEST_PATH, transform=transforms.ToTensor())
-    test_loader = DataLoader(test_dataset)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
     return train_loader, val_loader, test_loader
 
