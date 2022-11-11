@@ -2,6 +2,8 @@ import os
 import pandas as pd
 from torchvision import transforms
 import torch
+import glob
+import random
 
 class StochasticAugmentation:
     def __init__(self, size=(224, 224)):
@@ -29,7 +31,7 @@ def generate_labels(train_path, test_path):
         label = img[0:3]
         train_annot.write('{0},{1}\n'.format(img, label))
         
-def map_labels_to_int(y, dtype='long'):
+def map_labels_to_int(y, dtype='long', cancer_clf=True):
     encoding = {
         "ADI": 0,
         "BACK": 1,
@@ -44,10 +46,36 @@ def map_labels_to_int(y, dtype='long'):
         "TUM": 8
     }
 
+    cancer = {
+        "ADI": 0, "BAC": 0, "DEB": 0, "LYM": 0, 
+        "MUC": 0, "MUS": 0, "NOR": 0, "STR": 1, "TUM": 1
+    }
+
+    if cancer_clf:
+        return torch.LongTensor([cancer[yy] for yy in y])
+
     if dtype == 'long':
         return torch.LongTensor([encoding[yy] for yy in y])
     else:
         return torch.Tensor([encoding[yy] for yy in y])
+
+def subset_data(data_dir_from, data_dir_to, subset_size=4000):
+    for label in ['ADI', 'BACK', 'DEB', 'LYM', 'MUC', 'MUS', 'NORM', 'STR', 'TUM']:
+        items = glob.glob(data_dir_from + '/{0}-*.tif'.format(label))
+        items = [item.split('/')[-1] for item in items]
+        i = 0
+        while i < subset_size:
+            item = random.choice(items)
+            try:
+                os.rename("{0}/{1}".format(data_dir_from, item), 
+                        "{0}/{1}".format(data_dir_to, item))
+                i += 1
+            except:
+                continue
+    return
+
+
+
 
 def generate_annotation_files():
     """
