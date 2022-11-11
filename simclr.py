@@ -19,7 +19,7 @@ from utils import map_labels_to_int
 
 class SimCLR():
     def __init__(self, model_backbone, batch_size, num_epochs, num_views=2, project_dim=64,
-                 num_classes=9, temperature=0.5, device='cuda'):
+                 num_classes=2, temperature=0.5, device='cuda'):
         self.device = device 
         self.model = model_backbone.to(self.device)
         self.optim = torch.optim.Adam(self.model.parameters())
@@ -36,7 +36,9 @@ class SimCLR():
         ).to(self.device)
 
         self.clf_head = nn.Sequential(
-            nn.Linear(1000, num_classes),
+            nn.Linear(1000, 128),
+            nn.ReLU(),
+            nn.Linear(128, num_classes),
             nn.Softmax(dim=1)
         ).to(self.device)
     
@@ -101,7 +103,6 @@ class SimCLR():
                 loss.backward()
                 optimizer.step()
 
-
                 losses.append(loss.cpu().detach().numpy())
                 accs.append(train_acc)
 
@@ -143,17 +144,22 @@ class SimCLR():
         for epoch in range(self.num_epochs):
             epoch_start_time = time.time()
             self.model.train()
+            num_errs = 0
             for (x_i, x_j), _ in train_loader:
-                x_i, x_j = x_i.to(self.device), x_j.to(self.device)
-                self.optim.zero_grad()
-                h_i, h_j, z_i, z_j = self.forward(x_i, x_j)
-                loss = self.NT_Xent(z_i, z_j)
-                loss.backward()
-                self.optim.step()
+                try:
+                    x_i, x_j = x_i.to(self.device), x_j.to(self.device)
+                    self.optim.zero_grad()
+                    h_i, h_j, z_i, z_j = self.forward(x_i, x_j)
+                    loss = self.NT_Xent(z_i, z_j)
+                    loss.backward()
+                    self.optim.step()
+                except RuntimeError:
+                    num_errs += 1
+                    pass
 
             epoch_end_time = time.time()
             epoch_dur = round(epoch_end_time - epoch_start_time, 2)
-            print('[epoch {0}] [train loss={1}] [time elapsed={2}s]'.format(epoch, loss, epoch_dur))
+            print('[epoch {0}] [train loss={1}] [time elapsed={2}s] [errors:{3}]'.format(epoch, loss, epoch_dur, num_errs))
 
             try: os.mkdir('checkpoints')
             except: pass
@@ -162,31 +168,20 @@ class SimCLR():
             except: pass
 
             checkpt_name = 'checkpoints/simclr/{0}.pth'.format(epoch)
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': self.model.state_dict(),
-                'optimizer_state_dict': self.model.state_dict(),
-                'loss': loss
-            }, checkpt_name)
+            torch.save(self.model.state_dict(), checkpt_name)
 
-    def test(self, test_loader):
-        ft_test_loader  = self.create_data_loaders_from_arrays(test_loader, 64)
+    def test(self, test_loader, batch_size=64):
+        ft_test_loader  = self.create_data_loaders_from_arrays(test_loader, batch_size=batch_size)
         self.model.eval()
         with torch.no_grad():
             total = correct = 0
             for X, t in ft_test_loader:
                 X = X.to(self.device)
-                y = self.clf_head(X)
-                for idx, i in enumerate(y.cpu()):
-                    if torch.argmax(i).cpu() == t.cpu()[idx]:
+                z = self.clf_head(X)
+                y = torch.argmax(z, axis=1)
+                for i in range(y.shape[0]):
+                    if y.cpu()[i] == t.cpu()[i]:
                         correct +=1
                     total +=1
-        return round(total / correct, 3)
+        return round(correct / total, 3)
                 
-
-
-
-
-
-
-        
