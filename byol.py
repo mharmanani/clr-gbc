@@ -1,4 +1,3 @@
-from pyexpat import model
 import torch
 import time
 import os
@@ -11,7 +10,7 @@ from torchvision.models.resnet import resnet50, resnet101, ResNet50_Weights
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
-from datasets import HistologyDataset
+from datasets import HistologyDataset, build_datasets
 
 
 def train_byol_model(model_backbone, epochs=10, batch_size=8, validation_split=0.2, random_seed=42, shuffle_dataset=True):
@@ -85,7 +84,12 @@ def train_byol_model(model_backbone, epochs=10, batch_size=8, validation_split=0
                 
             avg_val_loss = avg_val_loss / len(val_loader)
         end = time.time()
+
+        torch.save(model.state_dict(), 'checkpoints/byol/{epoch}.ckpt')
         print(f'[*] Epoch: {epoch} - Avg Train Loss: {avg_train_loss:.3f} - Avg Val Loss: {avg_val_loss:.3f} - Elapsed: {end - start:.2f}')
 
-#resnet = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
-#train_byol_model(model_backbone=resnet)
+    return model
+
+def test_byol_model(model, batch_size=128):
+    _, _, test_loader = build_datasets(batch_size=batch_size, augment_views=True)
+    
