@@ -4,11 +4,13 @@ import pandas as pd
 import torch
 from torch import nn
 from torchvision.io import read_image
+from torchmetrics import AUROC
+from sklearn.metrics import accuracy_score, confusion_matrix
 
 from utils import map_labels_to_int
 
 class ResNetWrapper(nn.Module):
-    def __init__(self, resnet, num_classes=2, device='cuda'):
+    def __init__(self, resnet, num_classes=2, device='cuda', num_epochs=30):
         super().__init__()
         self.resnet = resnet
         self.clf = nn.Sequential(
@@ -20,11 +22,12 @@ class ResNetWrapper(nn.Module):
         )
 
         self.device = device
+        self.num_epochs = num_epochs
 
     def forward(self, X):
         return self.clf(X)
 
-    def finetune(self, train_loader, val_loader, learning_rate=1e-3, num_epochs=30):
+    def finetune(self, train_loader, val_loader, learning_rate=1e-3):
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.clf.parameters(), lr=learning_rate)
 
@@ -36,7 +39,7 @@ class ResNetWrapper(nn.Module):
         val_losses = []
         val_accs = []
 
-        for epoch in range(1+num_epochs):
+        for epoch in range(1+self.num_epochs):
             self.clf.train()
             for batch in train_loader:
                 X, y = batch
@@ -81,6 +84,12 @@ class ResNetWrapper(nn.Module):
 
             epochs_arr.append(epoch)
 
+            checkpt_name = 'checkpoints/resnet/{0}.pth'.format(epoch)
+            torch.save(self.clf.state_dict(), checkpt_name)
+
+            # save weights for simclr
+            torch.save(self.resnet.state_dict(), 'checkpoints/resnet-simclr/{0}.pth'.format(epoch))
+
             print('[Epoch {0}] [train loss={1}] [train acc={2}] [val loss={3}] [val acc={4}]'
                 .format(epoch, train_loss, round(train_acc, 3), val_loss, round(val_acc, 3)))
 
@@ -88,22 +97,26 @@ class ResNetWrapper(nn.Module):
         self.clf.eval()
         with torch.no_grad():
             total = correct = 0
+            preds = []
+            pred_logits = []
+            ys = []
+            auc = AUROC(pos_label=1, num_classes=2)
             for batch in test_loader:
                 X, y = batch
                 y = map_labels_to_int(y, dtype='long')
                 X = X.to(self.device)
                 y = y.to(self.device)
                 z = self.clf(X)
-                print(torch.argmax(z, axis=1))
-                print(y)
-                for idx, i in enumerate(z):
-                    if torch.argmax(i) == y[idx]:
-                        correct +=1
-                    total +=1
-            test_acc = correct / total
+                auc.update(z, y)
+                for idx, i in enumerate(z.cpu()):
+                    preds.append(torch.argmax(i))
+                    pred_logits.append(i)
+                    ys.append(y.cpu()[idx])
 
-        return test_acc
-
+        CM = confusion_matrix(ys, preds)
+        sensitivity = CM[0,0] / (CM[0,0] + CM[0,1])
+        specificity = CM[1,1] / (CM[1,1] + CM[1, 0])
+        return auc.compute(), accuracy_score(ys, preds), sensitivity, specificity
         
 
 class ResidualBlock(nn.Module):
