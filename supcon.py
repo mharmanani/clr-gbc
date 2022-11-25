@@ -65,8 +65,12 @@ class SupCon(SimCLR):
     def supcon_loss(self, x_i, x_j, y):
         X = torch.cat([x_i.unsqueeze(1), x_j.unsqueeze(1)], dim=1)
         y = y.contiguous().view(-1, 1)
+        batch_size = self.batch_size
+
         if y.shape[0] != self.batch_size:
-            raise ValueError('Num of labels does not match num of features')
+            #raise ValueError('Num of labels does not match num of features')
+            batch_size = y.shape[0]
+        
         mask = torch.eq(y, y.T).float().to(self.device)
 
         contrast_count = X.shape[1]
@@ -88,7 +92,7 @@ class SupCon(SimCLR):
         logits_mask = torch.scatter(
             torch.ones_like(mask),
             1,
-            torch.arange(self.batch_size * anchor_count).view(-1, 1).to(self.device),
+            torch.arange(batch_size * anchor_count).view(-1, 1).to(self.device),
             0
         )
         mask = mask * logits_mask
@@ -102,7 +106,7 @@ class SupCon(SimCLR):
 
         # loss
         loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
-        loss = loss.view(anchor_count, self.batch_size).mean()
+        loss = loss.view(anchor_count, batch_size).mean()
 
         return loss
 
@@ -121,12 +125,13 @@ class SupCon(SimCLR):
                     self.optim.zero_grad()
                     h_i, h_j, z_i, z_j = self.forward(x_i, x_j)
                     loss = self.supcon_loss(z_i, z_j, y)
+                    print(loss)
                     train_losses.append(loss.cpu().detach().numpy())
                     loss.backward()
                     self.optim.step()
                 except RuntimeError:
-                    print('aa')
                     num_errs += 1
+                    print("error")
                     pass
             
             self.model.eval()
