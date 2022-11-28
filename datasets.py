@@ -6,8 +6,9 @@ from PIL import Image
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
-
-from utils import generate_labels, StochasticAugmentation
+import matplotlib.pyplot as plt
+import torch
+from utils import generate_labels, StochasticAugmentation, TestTransform
 
 
 class HistologyDataset(Dataset):
@@ -24,7 +25,7 @@ class HistologyDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = os.path.join(self.img_dir, self.img_labels.iloc[idx, 0])
-        image = Image.open(img_path)
+        image = Image.open(img_path).convert('RGB')
         label = self.img_labels.iloc[idx, 1]
         if self.transform:
             image = self.transform(image)
@@ -45,7 +46,7 @@ def build_datasets(batch_size=8, validation_split=0.2, shuffle_dataset=True, ran
     dataset_size = len(os.listdir(TRAIN_PATH))
     indices = list(range(dataset_size))
     split = int(np.floor(validation_split * dataset_size))
-    if shuffle_dataset :
+    if shuffle_dataset:
         np.random.seed(random_seed)
         np.random.shuffle(indices)
     train_indices, val_indices = indices[split:], indices[:split]
@@ -56,9 +57,8 @@ def build_datasets(batch_size=8, validation_split=0.2, shuffle_dataset=True, ran
 
     # Create the train data loader
     if augment_views:
-        train_dataset = HistologyDataset(annotations_file=TRAIN_ANNOT, img_dir=TRAIN_PATH, 
-                                         transform=StochasticAugmentation())
-    else: train_dataset = HistologyDataset(annotations_file=TRAIN_ANNOT, img_dir=TRAIN_PATH, transform=transforms.ToTensor())
+        train_dataset = HistologyDataset(annotations_file=TRAIN_ANNOT, img_dir=TRAIN_PATH, transform=StochasticAugmentation())
+    else: train_dataset = HistologyDataset(annotations_file=TRAIN_ANNOT, img_dir=TRAIN_PATH, transform=TestTransform())
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler)
 
@@ -66,7 +66,9 @@ def build_datasets(batch_size=8, validation_split=0.2, shuffle_dataset=True, ran
     val_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=val_sampler)
 
     # Create the test data loader
-    test_dataset = HistologyDataset(annotations_file=TEST_ANNOT, img_dir=TEST_PATH, transform=transforms.ToTensor())
+    if augment_views:
+        test_dataset = HistologyDataset(annotations_file=TEST_ANNOT, img_dir=TEST_PATH, transform=StochasticAugmentation())
+    else: test_dataset = HistologyDataset(annotations_file=TEST_ANNOT, img_dir=TEST_PATH, transform=TestTransform())
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
     return train_loader, val_loader, test_loader
