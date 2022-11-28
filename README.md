@@ -1,4 +1,4 @@
-# LEARNING VISUAL REPRESENTATIONS OF COLORECTAL CANCER IN HISTOLOGY IMAGES USING CONTRASTIVE LEARNING
+# Learning Visual Representations of Colorectal Cancer in Histology Images using Contrastive Learning
 
 ## Summary
 In this work, we compare the performance of several contrastive learning models, both supervised and unsupervised. The 3 models we experiment with are:
