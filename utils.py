@@ -6,18 +6,29 @@ import glob
 import random
 
 class StochasticAugmentation:
-    def __init__(self, size=(224, 224)):
+    def __init__(self, size=(96, 96)):
         self.size = size
         self.aug = transforms.Compose([
             transforms.RandomResizedCrop(size=size),
             transforms.RandomHorizontalFlip(),  # with 0.5 probability
             transforms.RandomApply([transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)], p=0.8),
             transforms.RandomGrayscale(p=0.2),
+            transforms.ToTensor(),
+        ])
+
+    def __call__(self, X):
+        return self.aug(X.convert("RGB")), self.aug(X.convert("RGB"))
+
+class TestTransform:
+    def __init__(self, size=(96, 96)):
+        self.size = size
+        self.tr = transforms.Compose([
+            transforms.Resize(size=size),
             transforms.ToTensor()
         ])
 
     def __call__(self, X):
-        return self.aug(X), self.aug(X)
+        return self.tr(X.convert("RGB"))
 
 def generate_labels(train_path, test_path):
     val_annot = open('data/test_annot.csv', 'w')
@@ -64,13 +75,16 @@ def subset_data(data_dir_from, data_dir_to, subset_size=4000):
         items = glob.glob(data_dir_from + '/{0}-*.tif'.format(label))
         items = [item.split('/')[-1] for item in items]
         i = 0
-        while i < subset_size:
+        class_size = subset_size if label not in ['STR', 'TUM'] else 3*subset_size
+        while i < class_size:
             item = random.choice(items)
+            print(item)
             try:
                 os.rename("{0}/{1}".format(data_dir_from, item), 
                         "{0}/{1}".format(data_dir_to, item))
                 i += 1
             except:
+                print('error')
                 continue
     return
 
