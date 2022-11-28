@@ -41,7 +41,9 @@ class SimCLR():
 
         # add a classification head for downstream tasks
         self.clf_head = nn.Sequential(
-            nn.Linear(512, num_classes),
+            nn.Linear(512, 128),
+            nn.ReLu(),
+            nn.Linear(128, num_classes),
             nn.Softmax(dim=1)
         ).to(self.device)
         
@@ -117,7 +119,7 @@ class SimCLR():
         )
         return data_loader
 
-    def train_clf_head(self, train_loader, val_loader, num_epochs=30, recompute=True):
+    def train_clf_head(self, train_loader, val_loader, num_epochs=30):
         """
         Train a shallow classifier on the learned SimCLR representations computed by the
         backbone.
@@ -127,15 +129,8 @@ class SimCLR():
         :val_loader:
             Validation dataset without stochastic augmentation.
         """
-        if recompute:
-            ft_train_loader  = self.create_data_loaders_from_arrays(train_loader, 64)
-            ft_val_loader = self.create_data_loaders_from_arrays(val_loader, 64)
-
-            torch.save(ft_train_loader, "data/ft_train.pt")
-            torch.save(ft_val_loader, "data/ft_val.pt")
-        else:
-            ft_train_loader = torch.load("data/ft_train.pt")
-            ft_val_loader = torch.load("data/ft_val.pt")
+        ft_train_loader  = self.create_data_loaders_from_arrays(train_loader, 64)
+        ft_val_loader = self.create_data_loaders_from_arrays(val_loader, 64)
         
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.clf_head.parameters(), lr=3e-3, weight_decay=1e-5)
@@ -245,8 +240,8 @@ class SimCLR():
                     loss.backward()
                     self.optim.step()
                 except RuntimeError:
-                    print('error')
-                    num_errs += 1
+                    # problematic images cause PyTorch numel to overflow
+                    num_errs += 1 
                     pass
             
             self.model.eval()
@@ -277,12 +272,16 @@ class SimCLR():
             checkpt_name = 'checkpoints/simclr/{0}.pth'.format(epoch)
             torch.save(self.model.state_dict(), checkpt_name)
 
-    def test(self, test_loader, batch_size=64, recompute=True):
-        if recompute:
-            ft_test_loader  = self.create_data_loaders_from_arrays(test_loader, batch_size=batch_size)
-            torch.save(ft_test_loader, "data/ft_test.pt")
-        else:
-            ft_test_loader = torch.load("data/ft_test.pt")
+    def test(self, test_loader, batch_size=64):
+        """
+        Test the performance of the classification head on the representations
+        computed by the SimCLR backbone.
+
+        :test_loader:
+            A test dataset containing the computed representations of SimCLR when
+            run on the original test set.
+        """
+        ft_test_loader  = self.create_data_loaders_from_arrays(test_loader, batch_size=batch_size)
         
         self.model.eval()
         self.clf_head.eval()
