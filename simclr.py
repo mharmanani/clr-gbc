@@ -42,7 +42,7 @@ class SimCLR():
         # add a classification head for downstream tasks
         self.clf_head = nn.Sequential(
             nn.Linear(512, 128),
-            nn.ReLu(),
+            nn.ReLU(),
             nn.Linear(128, num_classes),
             nn.Softmax(dim=1)
         ).to(self.device)
