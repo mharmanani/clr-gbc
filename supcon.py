@@ -164,7 +164,7 @@ class SupCon(SimCLR):
             checkpt_name = 'checkpoints/simclr/{0}.pth'.format(epoch)
             torch.save(self.model.state_dict(), checkpt_name)
 
-    def test(self, test_loader, batch_size=64, recompute=False):
+    def test(self, test_loader, batch_size=64, recompute=True):
         if recompute:
             ft_test_loader  = self.create_data_loaders_from_arrays(test_loader, batch_size=batch_size)
             torch.save(ft_test_loader, "data/ft_test.pt")
