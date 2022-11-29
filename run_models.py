@@ -9,7 +9,7 @@ from datasets import build_datasets
 # Import models
 from simclr import SimCLR
 from supcon import SupCon
-from byol import train_byol_model, test_byol_model, train_byol_classifier
+from byol import train_byol_model, byol_based_classifier
 from resnet import ResNetWrapper
 
 def parse_option():
@@ -66,7 +66,7 @@ def main():
         
         # Remove stochastic augmentation for downstream classification tasks
         train_loader, val_loader, test_loader = build_datasets(batch_size=opt.batch_size, augment_views=False)
-        simclr.train_clf_head(train_loader=train_loader, val_loader=val_loader, num_epochs=150)
+        simclr.train_clf_head(train_loader=train_loader, val_loader=val_loader, num_epochs=30)
         
         # Compute the test metrics
         test_metrics = simclr.test(test_loader=test_loader, batch_size=opt.batch_size)
@@ -83,9 +83,7 @@ def main():
                 batch_size=opt.batch_size)
         
         elif opt.mode == 'test':
-            train_byol_classifier(backbone, train_loader, val_loader, load_weights=opt.from_epoch >= 0, from_epoch=opt.from_epoch)
-            test_accuracy = test_byol_model(model_backbone=backbone, load_weights=opt.from_epoch >= 0, from_epoch=opt.from_epoch)
-            print(test_accuracy)
+            byol_based_classifier(backbone, train_loader, val_loader, load_weights=opt.from_epoch >= 0, from_epoch=opt.from_epoch)
 
     elif opt.model == 'baseline':
         train_loader, val_loader, test_loader = build_datasets(batch_size=opt.batch_size, augment_views=False)
