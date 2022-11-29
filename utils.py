@@ -90,7 +90,9 @@ def subset_data(data_dir_from, data_dir_to, subset_size=4000):
 
 
 
-
+"""
+@author: Sana Arastehfar
+"""
 def generate_annotation_files():
     """
     This function generates the annotation files for the
@@ -108,16 +110,81 @@ def generate_annotation_files():
     # getting the directory names (annotations)
     dir_names = os.listdir('data/NCT-CRC-HE-100K-NONORM')
     
-    for dir_name in dir_names:
+    print('[*] Creating the backup directories (if does not already exist)...')
+    os.makedirs('data/NCT-CRC-HE-100K-NONORM-MODIFIED', exist_ok=True)
+    os.makedirs('data/NCT-CRC-HE-100K-NONORM-MODIFIED/Train', exist_ok=True)
+    
+    for i in tqdm(range(len(dir_names)), desc='Preparing the Training Files'):
+        dir_name = dir_names[i]
         image_files = os.listdir(f'data/NCT-CRC-HE-100K-NONORM/{dir_name}')
         
         annotations['name'].extend(image_files)
         annotations['class'].extend([dir_name] * len(image_files))
         
+        for image_file in image_files:
+            shutil.copy(f'data/NCT-CRC-HE-100K-NONORM/{dir_name}/{image_file}', 
+                        f'data/NCT-CRC-HE-100K-NONORM-MODIFIED/Train/{image_file}')
+        
     annotations = pd.DataFrame(annotations)
-    annotations.to_csv('data/NCT-CRC-HE-100K-NONORM/annotations.csv')
+    annotations.to_csv('data/NCT-CRC-HE-100K-NONORM-MODIFIED/annotations.csv', index=False)
+    
+
+def sift_training_files():
+    # loading the training samples from the file
+    with open('train_files.txt', 'r') as handle:
+        training_samples = handle.readlines()
+    
+    training_samples = list(map(lambda x: x.strip(), training_samples))
+    
+    # cleanining the annotation file
+    annotations = pd.read_csv('data/NCT-CRC-HE-100K-NONORM-MODIFIED/annotations.csv')
+    train_annotations = annotations[annotations['name'].isin(training_samples)]
+    test_annotations = annotations[~annotations['name'].isin(training_samples)]
+    train_annotations.to_csv('data/NCT-CRC-HE-100K-NONORM-MODIFIED/train_annotations.csv', index=False)
+    test_annotations.to_csv('data/NCT-CRC-HE-100K-NONORM-MODIFIED/test_annotations.csv', index=False)
     
     
+    # removing the redundant files
+    existing_samples = os.listdir('data/NCT-CRC-HE-100K-NONORM-MODIFIED/Train/')
+    os.makedirs('data//NCT-CRC-HE-100K-NONORM-MODIFIED/Test/', exist_ok=True)
+    for file_name in existing_samples:
+        if file_name not in training_samples:
+            shutil.move(f'data/NCT-CRC-HE-100K-NONORM-MODIFIED/Train/{file_name}', f'data/NCT-CRC-HE-100K-NONORM-MODIFIED/Test/{file_name}')
+
+
+def make_annotations_binary():
+    warnings.filterwarnings('ignore')
+    # loading the annotation file
+    train_annotations = pd.read_csv('data/NCT-CRC-HE-100K-NONORM-MODIFIED/train_annotations.csv')
+    test_annotations = pd.read_csv('data/NCT-CRC-HE-100K-NONORM-MODIFIED/test_annotations.csv')
+    new_annotations = []
+    for index in range(len(train_annotations)):
+        name = train_annotations['name'].iloc[index]
+        if name.startswith('STR') or name.startswith('TUM'):
+            new_annotations.append(1)
+        else:
+            new_annotations.append(0)
+            
+    train_annotations = train_annotations.drop(columns=['class'])
+    train_annotations['class'] = new_annotations
+    
+    train_annotations.to_csv('data/NCT-CRC-HE-100K-NONORM-MODIFIED/train_annotations_binary.csv', index=False)
+    
+    new_annotations = []
+    for index in range(len(test_annotations)):
+        name = test_annotations['name'].iloc[index]
+        if name.startswith('STR') or name.startswith('TUM'):
+            new_annotations.append(1)
+        else:
+            new_annotations.append(0)
+            
+    test_annotations = test_annotations.drop(columns=['class'])
+    test_annotations['class'] = new_annotations
+    
+    test_annotations.to_csv('data/NCT-CRC-HE-100K-NONORM-MODIFIED/test_annotations_binary.csv', index=False)
+    print('[*] Binary annotations generated')
 
 if __name__ == '__main__':
     generate_annotation_files()
+    sift_training_files()
+    make_annotations_binary()
